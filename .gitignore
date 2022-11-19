@@ -127,3 +127,12 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# BIC-Lang .gitignore
+# transpiled cpp files
+.cpp
+
+# compile cpp files
+.exe
+.elf
+.obj
