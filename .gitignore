@@ -130,9 +130,9 @@ dmypy.json
 
 # BIC-Lang .gitignore
 # transpiled cpp files
-.cpp
+*.cpp
 
 # compile cpp files
-.exe
-.elf
-.obj
+*.exe
+*.elf
+*.obj
