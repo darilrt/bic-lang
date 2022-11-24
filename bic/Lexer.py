@@ -26,6 +26,7 @@ class Lexer:
             'if', 'elif', 'else', 'while', 'for', 'in', 'break', 'continue', # control flow
             'class', 'pub', 'priv', 'static', 'virtual', 'new', 'del', 'null', 'operator',  # classes
             'enum',
+            'import',
         ]
         
     def get_state(self):
@@ -88,6 +89,11 @@ class Lexer:
         while self.current_char is not None and self.current_char != '"':
             result += self.current_char
             self.advance()
+            if self.current_char == '\\':
+                result += self.current_char
+                self.advance()
+                result += self.current_char
+                self.advance()
         self.advance()
         return result
 
@@ -162,6 +168,20 @@ class Lexer:
             elif self.current_char == '"':
                 self.advance()
                 return Token('STRING', self.string(), self.line, self.column)
+            
+            elif self.current_char == "'": 
+                self.advance()
+                char = ""
+                while self.current_char is not None and self.current_char != "'":
+                    char += self.current_char
+                    self.advance()
+                    if self.current_char == '\\':
+                        char += self.current_char
+                        self.advance()
+                        char += self.current_char
+                        self.advance()
+                self.advance()
+                return Token('CHAR', char, self.line, self.column)
 
             self.error()
             

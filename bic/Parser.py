@@ -124,11 +124,15 @@ class Parser:
             node = NamespaceAccess(left=node, right=self.name())
         return node
     
-    # object_access: expr (DOT name)+
+    # object_access: expr ((DOT | ARROW) name)+
     def object_access(self, node):
-        while self.current_token.type == 'DOT':
-            self.eat('DOT')
-            node = ObjectAccess(left=node, right=self.name())
+        while self.current_token.type == 'DOT' or self.current_token.type == 'ARROW':
+            if self.current_token.type == 'DOT':
+                self.eat('DOT')
+                node = ObjectAccess(node, self.name())
+            elif self.current_token.type == 'ARROW':
+                self.eat('ARROW')
+                node = ObjectAccess(node, self.name(), is_arrow=True)
         return node
     
     # args: expr (COMMA expr)*
@@ -182,18 +186,25 @@ class Parser:
         elif token.type == 'STRING':
             self.eat('STRING')
             return String(token)
+        elif token.type == 'CHAR':
+            self.eat('CHAR')
+            return Char(token)
         else:
             self.error()
 
     # primary: value | LPAREN expr RPAREN | object_access | call | array
     def primary(self):
         token = self.current_token
-        if token.type in ('INTEGER', 'FLOAT', 'BOOLEAN', 'NULL', 'STRING'):
+        if token.type in ('INTEGER', 'FLOAT', 'BOOLEAN', 'NULL', 'STRING', 'CHAR'):
             return self.value()
         
         elif token.type == 'TYPE':
             self.eat('TYPE')
             return Type(token)
+
+        elif token.type == 'DOT':
+            self.eat('DOT')
+            return ObjectAccess('this', self.name())
 
         elif token.type == 'LPAREN':
             self.eat('LPAREN')
@@ -209,19 +220,12 @@ class Parser:
             self.eat(token.type)
             return PreOp(token, self.primary())
 
-        elif token.type == 'DOT':
-            return self.object_access(Token('ID', 'this', token.line, token.column))
-
         elif token.type == 'ID':
             node = self.name()
 
             # if the next token is a COLONCOLON, then this is a namespace access
             if self.current_token.type == 'COLONCOLON':
                 node = self.namespace_access(node)
-            
-            # if the next token is a DOT, then this is an object access
-            if self.current_token.type == 'DOT':
-                node = self.object_access(node)
             
             # if the next token is ++ or --, then this is a post-increment or post-decrement
             if self.current_token.type in ('INC', 'DEC'):
@@ -242,8 +246,13 @@ class Parser:
             return node
         
         self.error()
+    
+    # dot_expr: primary (DOT ID)+
+    def dot_expr(self):
+        node = self.primary()
+        return self.object_access(node)
 
-    # unary: (PLUS | MINUS | AMP | STAR) primary
+    # unary: (PLUS | MINUS | AMP | STAR) dot_expr
     def unary(self):
         token = self.current_token
         if self.current_token.type == 'NEW':
@@ -251,29 +260,35 @@ class Parser:
             return New(self.expr())
         elif token.type == 'PLUS':
             self.eat('PLUS')
-            return UnaryOp(token, self.primary())
-        elif token.type == 'MINUS':
-            self.eat('MINUS')
-            return UnaryOp(token, self.primary())
-        elif token.type == 'AMP':
-            self.eat('AMP')
-            return UnaryOp(token, self.primary())
-        elif token.type == 'MUL':
-            self.eat('MUL')
-            return UnaryOp(token, self.unary())
+            return UnaryOp(token, self.dot_expr())
         elif token.type == 'BANG':
             self.eat('BANG')
-            return UnaryOp(token, self.primary())
+            return UnaryOp(token, self.dot_expr())
+        elif token.type == 'MINUS':
+            self.eat('MINUS')
+            return UnaryOp(token, self.dot_expr())
+        elif token.type == 'AMP':
+            self.eat('AMP')
+            return UnaryOp(token, self.dot_expr())
+        elif token.type == 'MUL':
+            self.eat('MUL')
+            return UnaryOp(token, self.dot_expr())
+        elif token.type == 'BANG':
+            self.eat('BANG')
+            return UnaryOp(token, self.dot_expr())
         
-        return self.primary()
+        return self.dot_expr()
     
     # term: unary ((MUL | DIV) unary)* 
     def term(self):
         node = self.unary()
         
-        while self.current_token.type in ('MUL', 'FORWARDSLASH', 'MOD'):
+        while self.current_token.type in ('DOT', 'MUL', 'FORWARDSLASH', 'MOD'):
             token = self.current_token
-            if token.type == 'MUL':
+            if token.type == 'DOT':
+                self.eat('DOT')
+                node = Dot(node, self.unary())
+            elif token.type == 'MUL':
                 self.eat('MUL')
             elif token.type == 'FORWARDSLASH':
                 self.eat('FORWARDSLASH')
@@ -811,7 +826,15 @@ class Parser:
             self.eat('EOF')
         elif token.type == 'CPPLIT':
             self.eat('CPPLIT')
-            return CppLit(token.value)
+            return Statement(CppLit(token.value))
+        elif token.type == 'IMPORT':
+            self.eat('IMPORT')
+            node = None
+            if self.current_token.type == 'STRING':
+                node = Import(self.current_token)
+                self.eat('STRING')
+            self.eat('SEMI')
+            return Statement(node)
         elif token.type == 'SEMI':
             self.eat('SEMI')
         elif token.type == 'TYPE_KEY':
@@ -827,7 +850,7 @@ class Parser:
             self.eat('SEMI')
             return Statement(node)
         elif token.type == 'LBRACE':
-            return self.block()
+            return Statement(self.block())
         elif token.type == 'IF':
             return Statement(self.if_stmt())
         elif token.type == 'WHILE':

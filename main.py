@@ -1,48 +1,42 @@
-from bic import Parser, Lexer
+from bic import Parser, Lexer, CodeGenerator
 import sys
 import argparse
+import os
 
 # helper function to get the options from the command line
+# -o <folder> to specify the output folder
 def get_options():
     parser = argparse.ArgumentParser(description='Bic compiler')
     parser.add_argument('filename', help='the file to compile')
-    parser.add_argument('-o', '--output', help='the file to output to')
-    parser.add_argument('-t', '--tokens', action='store_true', help='print tokens')
-    parser.add_argument('-a', '--ast', action='store_true', help='print AST')
-    parser.add_argument('-c', '--code', action='store_true', help='print code')
+    parser.add_argument('-o', '--output', help='the output folder', default='./')
     return parser.parse_args()
 
 def main():
-    # get the options from the command line
     options = get_options()
 
-    # create lexer and parser
     lexer = Lexer(options.filename)
-
-    if options.tokens:
-        lexer.print_token = True
-
     parser = Parser(lexer)
-
-    # parse and print AST
     tree = parser.parse()
 
-    if options.ast:
-        print(tree)
+    cg = CodeGenerator(tree, options.filename.replace('.bic', '').split('/')[-1])
+    cg.generate()
 
-    # transpile and print code
-    code = tree.transpile()
-    
-    if options.code:
-        print(code)
-    
     # write code to file
     if options.output:
-        with open(options.output, 'w') as file:
-            file.truncate(0)
-            file.write(code)
+        output_filename = options.output + options.filename.replace('.bic', '')
         
-        print('Successfully compiled to ' + options.output)
+        if not os.path.exists(output_filename):
+            os.makedirs(output_filename)
+        
+        with open(output_filename + '.cpp', 'w+') as file:
+            file.truncate(0)
+            file.write(cg.code)
+        
+        with open(output_filename + '.hpp', 'w+') as file:
+            file.truncate(0)
+            file.write(cg.header)
+        
+        print(u'\u2713', options.filename, u'\u2192', output_filename + '.cpp', output_filename + '.hpp')
 
 if __name__ == '__main__':
     main()

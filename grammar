@@ -1,0 +1,32 @@
+value:
+    INT |
+    FLOAT |
+    STRING |
+    BOOLEAN |
+    NULL |
+
+unary_operator:
+    '-' |
+    '+' |
+    '!' |
+    '~' |
+
+unary_expr:
+    unary_op expr |
+    expr
+
+mul_expr:
+    mul_expr '*' unary_expr |
+    mul_expr '/' unary_expr |
+    unary_expr |
+
+add_expr:
+    add_expr '+' mul_expr |
+    add_expr '-' mul_expr |
+    mul_expr |
+
+expr:
+    add_expr
+
+comp_expr:
+    expr (EQ | NEQ | LT | GT | LTE | GTE) expr |    

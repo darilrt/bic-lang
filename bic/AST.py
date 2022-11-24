@@ -72,6 +72,11 @@ class String(AST_token_value):
     def transpile(self, depth=0) -> str:
         return f'"{self.value}"'
 
+# Char: char
+class Char(AST_token_value):
+    def transpile(self, depth=0) -> str:
+        return f"'{self.value}'"
+
 # Float: float
 class Float(AST_token_value):
     pass
@@ -106,15 +111,18 @@ class NamespaceAccess(AST_left_right):
         return f'{left}::{right}'
 
 # ObjectAccess: object access
-class ObjectAccess(AST_left_right):
-    def transpile(self, depth=0):
-        left = self.left.transpile(depth=depth) if isinstance(self.left, AST) else self.left.value
-        right = self.right.transpile(depth=depth) if isinstance(self.right, AST) else self.right.value
+class ObjectAccess(AST):
+    def __init__(self, left, right, is_arrow=False):
+        self.left = left
+        self.right = right
+        self.op = '->' if is_arrow else '.'
 
-        if left == 'this':
+    def transpile(self, depth=0):
+        right = self.right.transpile(depth=depth) if isinstance(self.right, AST) else self.right.value
+        if self.left == 'this':
             return f'this->{right}'
-        
-        return f'{left}.{right}'
+        left = self.left.transpile(depth=depth) if isinstance(self.left, AST) else self.left.value
+        return f'{left}{self.op}{right}'
 
 # Index: Index
 class Index(AST_left_right):
@@ -122,6 +130,13 @@ class Index(AST_left_right):
         left = self.left.transpile(depth=depth) if isinstance(self.left, AST) else self.left.value
         right = self.right.transpile(depth=depth) if isinstance(self.right, AST) else self.right.value
         return f'{left}[{right}]'
+
+# Dot: Dot
+class Dot(AST_left_right):
+    def transpile(self, depth=0):
+        left = self.left.transpile(depth=depth) if isinstance(self.left, AST) else self.left.value
+        right = self.right.transpile(depth=depth) if isinstance(self.right, AST) else self.right.value
+        return f'{left}.{right}'
 
 # Types
 # Type: type
@@ -335,7 +350,10 @@ class Statement(AST_token):
         if self.token is None:
             return None
 
-        stmt = self.token.transpile(depth).strip() + ';'
+        stmt = self.token.transpile(depth).strip()
+
+        if not isinstance(self.token, (CppLit, Import)):
+            stmt += ';' if stmt and stmt[-1] != '}' else ''
         
         if stmt == "":
             return None
@@ -450,19 +468,27 @@ class FuncDecl(AST):
             body=self.body
         )
 
-    def transpile(self, depth=0):
+    def transpile(self, depth=0, parent : str='', is_header=False) -> str:
         name = self.name.value
         template = f'template <{self.template.transpile()}> ' if self.template else ''
         if self.method_type == 'destructor': name = '~' + name
         args = ", ".join(map(lambda a: a.transpile(), self.args))
-        type = (self.type.transpile() if self.type else 'auto') if not self.method_type == 'constructor' and not self.method_type == 'destructor' else ''
+        type = ((self.type.transpile() + ' ') if self.type else 'auto ' ) if not self.method_type == 'constructor' and not self.method_type == 'destructor' else ''
         body = self.body.transpile(depth=depth) if self.body else '= 0'
-        const = 'const ' if self.is_const else ''
+        const = ' const ' if self.is_const else ''
         protection = get_protection(self.protection)
         static = 'static ' if self.is_static else ''
         virtual = 'virtual ' if self.is_virtual else ''
-        nodiscard = '[[nodiscard]] ' if type != 'auto' and type != 'void' else ''
-        return f'{protection}{template}{nodiscard}{static}{virtual}{type} {name}({args}) {const}{body}'
+        nodiscard = '[[nodiscard]] ' if type != 'auto ' and type != 'void ' else ''
+        if self.method_type in ['constructor', 'destructor']: nodiscard = ''
+        parent_name = parent + '::' if parent else ''
+
+        if parent_name == '' and name == 'main':
+            if is_header: return ''
+            return f'{type}{parent_name}{name}({args}) {const}{body}'
+
+        if is_header: return f'{protection}{template}{nodiscard}{static}{virtual}{type}{name}({args}){const};'
+        return f'{type}{parent_name}{name}({args}) {const}{body}'
 
 
 # return: return statement
@@ -620,7 +646,7 @@ class ClassDecl(AST):
             inherits=self.inherits
         )
     
-    def transpile(self, depth=0) -> str:
+    def transpile(self, depth=0, is_header=False) -> str:
         name = self.name.value
         # for node in body add protect to each node
         for stmt in self.body.statements:
@@ -635,11 +661,13 @@ class ClassDecl(AST):
                 node.protection = 'protected'
 
         body = self.body.transpile(depth=depth)
+        if is_header:
+            body = ''
 
         template = f'template <{self.template.transpile()}> ' if self.template else ''
         inherits = f' : {", ".join(map(lambda i: f"{get_protection(i[0])[:-2]} {i[1].transpile()}", self.inherits))}' if self.inherits else ''
 
-        return f'{template}class {name}{inherits} {body}'
+        return f'{template}class {name}{inherits}'
 
 # OperatorDecl: operator declaration
 class OperatorDecl(AST):
@@ -738,4 +766,22 @@ class EnumDecl(AST):
             body += f'\n{indent}{e.transpile()},'
         body += f'\n{base}}}'
         protection = get_protection(self.protection)
-        return f'{protection}enum class {name}{type} {body}'
+        return f'{protection}enum class {name}{type} {body};'
+
+# import: import statement
+class Import(AST):
+    def __init__(self, path):
+        self.path = path
+
+    def __str__(self) -> str:
+        return 'Import({path})'.format(
+            path=self.path
+        )
+    
+    def transpile(self, depth=0) -> str:
+        path = self.path.value
+
+        # change path extension to .hpp
+        path = path.replace('.bic', '.hpp')
+
+        return f'#include "{path}"'
