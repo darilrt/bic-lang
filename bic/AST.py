@@ -468,7 +468,7 @@ class FuncDecl(AST):
             body=self.body
         )
 
-    def transpile(self, depth=0, parent : str='', is_header=False) -> str:
+    def transpile(self, depth=0, parent : str='', is_header=False, all_data=False) -> str:
         name = self.name.value
         template = f'template <{self.template.transpile()}> ' if self.template else ''
         if self.method_type == 'destructor': name = '~' + name
@@ -482,6 +482,9 @@ class FuncDecl(AST):
         nodiscard = '[[nodiscard]] ' if type != 'auto ' and type != 'void ' else ''
         if self.method_type in ['constructor', 'destructor']: nodiscard = ''
         parent_name = parent + '::' if parent else ''
+
+        if all_data:
+            return f'{protection}{template}{nodiscard}{static}{virtual}{type}{name}({args}){const}{body}'
 
         if parent_name == '' and name == 'main':
             if is_header: return ''

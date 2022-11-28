@@ -61,7 +61,7 @@ class CodeGenerator:
 
     def generate_func(self, func_decl : FuncDecl, parent : str = '', depth : int = 0):
         if func_decl.template:
-            self.header += func_decl.transpile(depth=depth, parent=parent) + '\n'
+            self.header += func_decl.transpile(depth=depth, parent=parent, all_data=True) + '\n'
         else:
             self.header += func_decl.transpile(depth=depth, parent=parent, is_header=True) + '\n'
             self.code += func_decl.transpile(depth=depth, parent=parent) + '\n'

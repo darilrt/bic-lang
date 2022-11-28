@@ -321,12 +321,12 @@ class Parser:
     def bitop(self):
         node = self.add()
 
-        while self.current_token.type in ('BITAND', 'BITOR', 'BITXOR', 'LSHIFT', 'RSHIFT'):
+        while self.current_token.type in ('AMP', 'PIPE', 'BITXOR', 'LSHIFT', 'RSHIFT'):
             token = self.current_token
-            if token.type == 'BITAND':
-                self.eat('BITAND')
-            elif token.type == 'BITOR':
-                self.eat('BITOR')
+            if token.type == 'AMP':
+                self.eat('AMP')
+            elif token.type == 'PIPE':
+                self.eat('PIPE')
             elif token.type == 'BITXOR':
                 self.eat('BITXOR')
             elif token.type == 'LSHIFT':
